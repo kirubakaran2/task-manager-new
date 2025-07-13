@@ -5,12 +5,13 @@ import User from '../../../../models/User';
 // ✅ GET a single user by ID
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
+    const { id } = await params;
 
-    const user = await User.findById(params.id).lean();
+    const user = await User.findById(id).lean();
     if (!user) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
@@ -27,10 +28,10 @@ export async function GET(
 // ✅ UPDATE a user by ID
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { email, role, department, location } = body;
 
@@ -66,10 +67,10 @@ export async function PUT(
 // ✅ DELETE a user by ID
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     await connectDB();
 
     const user = await User.findByIdAndDelete(id);
