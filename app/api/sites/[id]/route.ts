@@ -3,19 +3,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../lib/db';
 import Site from '../../../../models/Site';
 
-// PUT: Update a department
+// PUT: Update a site
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const { name } = await request.json();
 
     if (!name || typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json({ error: 'site name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Site name is required' }, { status: 400 });
     }
 
     const updated = await Site.findByIdAndUpdate(
@@ -35,13 +35,13 @@ export async function PUT(
   }
 }
 
-// DELETE: Remove a department
+// DELETE: Remove a site
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const deleted = await Site.findByIdAndDelete(id);
