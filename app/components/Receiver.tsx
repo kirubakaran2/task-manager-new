@@ -109,7 +109,6 @@ export default function TotalCasesByReceiver() {
                 {data.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={entry.color}
                     fillOpacity={activeIndex === index ? 0.7 : 1}
                   />
                 ))}
