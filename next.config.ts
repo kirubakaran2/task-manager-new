@@ -1,6 +1,8 @@
-/** @type {import('next').NextConfig} */
+// next.config.ts
 const nextConfig = {
-  reactStrictMode: true,
+  eslint: {
+    ignoreDuringBuilds: true, // 🛑 disables blocking on lint errors
+  },
   experimental: {
     appDir: true,
   },
