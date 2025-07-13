@@ -4,7 +4,6 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Menu, User, LogOut, Home, Clipboard, Settings } from 'lucide-react';
-import NotificationBadge from './NotificationBadge';
 import { requireAuth } from '../utils/auth'; // Adjust import path for your project
 
 interface LayoutProps {
@@ -116,7 +115,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                 <div className="flex items-center space-x-4">
                   {/* Notification icon with badge */}
-                  <NotificationBadge />
                 </div>
               </div>
             </div>
