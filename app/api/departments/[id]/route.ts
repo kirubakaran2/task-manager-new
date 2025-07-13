@@ -3,13 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../lib/db';
 import Department from '../../../../models/Departments';
 
-// PUT: Update a department
+interface RouteContext {
+  params: {
+    id: string;
+  };
+}
+
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: RouteContext
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = context.params;
 
   try {
     const { name } = await request.json();
@@ -35,13 +40,12 @@ export async function PUT(
   }
 }
 
-// DELETE: Remove a department
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  context: RouteContext
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = context.params;
 
   try {
     const deleted = await Department.findByIdAndDelete(id);
