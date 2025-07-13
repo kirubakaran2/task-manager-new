@@ -3,15 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '../../../../lib/db';
 import Department from '../../../../models/Departments';
 
-interface RouteContext {
-  params: {
-    id: string;
-  };
-}
-
 export async function PUT(
   request: NextRequest,
-  context: RouteContext
+  context: { params: { id: string } }
 ) {
   await connectDB();
   const { id } = context.params;
@@ -42,7 +36,7 @@ export async function PUT(
 
 export async function DELETE(
   _request: NextRequest,
-  context: RouteContext
+  context: { params: { id: string } }
 ) {
   await connectDB();
   const { id } = context.params;
