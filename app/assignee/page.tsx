@@ -13,6 +13,9 @@ interface User {
   department: string;
   location?: string;
 }
+interface ApiErrorResponse {
+  message: string;
+}
 
 interface Item {
   id: string;
@@ -33,7 +36,9 @@ interface UserApiResponse {
   location?: string;
   createdAt: string;
 }
-
+function isApiErrorResponse(data: any): data is ApiErrorResponse {
+  return typeof data === 'object' && data !== null && 'message' in data;
+}
 export default function UserManagement() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -128,9 +133,9 @@ useEffect(() => {
     setIsLoading(true);
     try {
       const res = await fetch("/api/users");
-      const data = await res.json() as UserApiResponse[];
-
+      // Check if the response is OK before trying to parse as JSON
       if (res.ok) {
+        const data = await res.json() as UserApiResponse[]; // Expect an array of users
         const formattedUsers = data.map((user) => ({
           id: user._id,
           email: user.email,
@@ -143,9 +148,13 @@ useEffect(() => {
         }));
         setRecentUsers(formattedUsers);
       } else {
-        toast.error("Failed to fetch users: " + data.message);
+        // If the response is not OK, it might be an error object with a message
+        const errorData = await res.json();
+        toast.error("Failed to fetch users: " + (errorData.message || "Unknown error"));
       }
-    } catch {
+    } catch (error) {
+      // Catch network errors or issues with JSON parsing
+      console.error("Error fetching recent users:", error);
       toast.error("Error fetching recent users");
     } finally {
       setIsLoading(false);
@@ -189,7 +198,7 @@ useEffect(() => {
         setDepartment("");
         setSelectedLocation("");
       } else {
-        toast.error(data.message || "Something went wrong");
+        toast.error("Something went wrong");
       }
     } catch {
       toast.error("Error adding user");
@@ -232,7 +241,7 @@ useEffect(() => {
         toast.success("User updated successfully!");
         setShowEditModal(false);
       } else {
-        toast.error(data.message || "Failed to update user");
+        toast.error("Something went wrong"); 
       }
     } catch {
       toast.error("Error updating user");
