@@ -6,10 +6,10 @@ import Receiver from '../../../../models/Receiver';
 // PUT: Update a receiver
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const { name } = await request.json();
@@ -38,10 +38,10 @@ export async function PUT(
 // DELETE: Remove a receiver
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await connectDB();
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const deleted = await Receiver.findByIdAndDelete(id);
