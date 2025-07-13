@@ -92,7 +92,9 @@ const VerifyCode = ({ length = 6, onComplete }: VerifyCodeProps) => {
             maxLength={1}
             className="w-12 h-12 text-center text-xl font-semibold border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
             value={code[index] || ''}
-            ref={(el) => (inputRefs.current[index] = el)}
+ref={(el) => {
+  inputRefs.current[index] = el;
+}} 
             onChange={(e) => handleChange(index, e.target.value)}
             onKeyDown={(e) => handleKeyDown(index, e)}
             onPaste={index === 0 ? handlePaste : undefined}
