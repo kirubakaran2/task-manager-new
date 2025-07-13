@@ -16,9 +16,9 @@ cloudinary.v2.config({
 });
 
 // GET /api/tasks/[id]
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await dbConnect();
-  const { id: taskId } = params;
+  const { id: taskId } = await params;
 
   try {
     const task = await Task.findById(taskId)
@@ -38,9 +38,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PUT /api/tasks/[id]
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await dbConnect();
-  const { id: taskId } = params;
+  const { id: taskId } = await params;
   const cookieStore = await cookies();
   const userCookie = cookieStore.get('user_data');
   if (!userCookie) return NextResponse.json({ error: 'Unauthorized. No user cookie.' }, { status: 401 });
@@ -128,10 +128,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Failed to update task', message: (err as Error).message }, { status: 500 });
   }
 }
+
 // DELETE /api/tasks/[id]
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await dbConnect();
-  const { id: taskId } = params;
+  const { id: taskId } = await params;
 
   try {
     const deletedTask = await Task.findByIdAndDelete(taskId);
