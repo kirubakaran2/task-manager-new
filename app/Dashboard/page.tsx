@@ -162,7 +162,7 @@ export default function Dashboard() {
       </div>
       <div className="container mx-auto px-4 py-6 pl-0 md:pl-60">
         {/* Enhanced Header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+        <header className="mt-10 sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
