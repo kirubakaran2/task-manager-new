@@ -1,15 +1,82 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Head from "next/head";
 import { Bell } from "lucide-react";
 import { parseCookies } from "nookies";
 import toast, { Toaster } from "react-hot-toast";
 import Cookies from "js-cookie";
-import axios from "axios";
+import { AgGridReact } from 'ag-grid-react';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
+
+// Custom styles for better pagination visibility
+const customStyles = `
+  .ag-theme-alpine .ag-paging-panel {
+    background-color: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+  
+  .ag-theme-alpine .ag-paging-button {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin: 0 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .ag-theme-alpine .ag-paging-button:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+  }
+  
+  .ag-theme-alpine .ag-paging-button.ag-disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+  }
+  
+  .ag-theme-alpine .ag-paging-page-summary-panel {
+    color: #6b7280;
+    font-weight: 500;
+  }
+  
+  .ag-theme-alpine .ag-paging-page-size-select {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #374151;
+  }
+`;
+import { 
+  ClientSideRowModelModule, 
+  ValidationModule,
+  PaginationModule,
+  TextFilterModule,
+  NumberFilterModule,
+  DateFilterModule,
+  ModuleRegistry
+} from 'ag-grid-community';
+
+// Register required modules
+ModuleRegistry.registerModules([
+  ClientSideRowModelModule,
+  ValidationModule,
+  PaginationModule,
+  TextFilterModule,
+  NumberFilterModule,
+  DateFilterModule
+]);
 import { requireAuth } from "../utils/auth";
 import Navbar from "../components/Navbar";
 import { useRouter } from "next/navigation";
+import { GridReadyEvent } from 'ag-grid-community';
 export default function MasterDatabase() {
   const [taskData, setTaskData] = useState<any>({ sno: "" });
   const [searchTerm, setSearchTerm] = useState("");
@@ -19,31 +86,24 @@ export default function MasterDatabase() {
   const [activeTab, setActiveTab] = useState("Task");
   const [taskId, setTaskId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
-  const filteredTasks = tasks.filter(
-    (task) =>
-      task.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.sender?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.location?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const [filteredAssignees, setFilteredAssignees] = useState<UserApiResponse[]>(
-    []
-  );
+  const [filteredAssignees, setFilteredAssignees] = useState<UserApiResponse[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [fileId, setFileId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
   const [list, setList] = useState<any[]>([]);
-  const [claims, setClaims] = useState<
-    Array<{
-      claimDetails: string;
-      claimSentDate: string;
-      claimReplyReceivedDate: string;
-      claimStatus: string;
-    }>
-  >([]);
+  const [claims, setClaims] = useState<Array<{
+    claimDetails: string;
+    claimSentDate: string;
+    claimReplyReceivedDate: string;
+    claimStatus: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [gridApi, setGridApi] = useState(null);
+  const [gridColumnApi, setGridColumnApi] = useState(null);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+
   const router = useRouter();
 
   type UserData = {
@@ -246,6 +306,92 @@ export default function MasterDatabase() {
     courtCaseStatus: "",
   });
 
+  const filteredTasks = tasks.filter(
+    (task) =>
+      task.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.sender?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.location?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const onGridReady = useCallback((params:any) => {
+    setGridApi(params.api);
+    setGridColumnApi(params.columnApi);
+  }, []);
+
+  const defaultColDef = useMemo(() => ({
+    sortable: true,
+    filter: true,
+    resizable: true,
+    minWidth: 120, // Increased for better readability
+    maxWidth: 300,
+    flex: 1,
+    suppressSizeToFit: false,
+  }), []);
+
+  const columnDefs = useMemo(() => [
+    { headerName: "S.No", field: "sno", minWidth: 80, maxWidth: 120 },
+    { headerName: "Sender", field: "sender", minWidth: 140 },
+    { headerName: "Subject", field: "subject", minWidth: 200, flex: 2 },
+    { headerName: "Location", field: "location", minWidth: 120 },
+    { headerName: "Receiver", field: "receiver", minWidth: 120 },
+    { headerName: "Site", field: "site", minWidth: 120 },
+    { headerName: "Period From", field: "periodFrom", minWidth: 120 },
+    { headerName: "Period To", field: "periodTo", minWidth: 120 },
+    { headerName: "Receipt Date", field: "receiptDate", minWidth: 120 },
+    { headerName: "Due Date", field: "dueDate", minWidth: 120 },
+    { headerName: "Overdue Date", field: "overDueDate", minWidth: 120 },
+    { headerName: "Priority", field: "priority", minWidth: 100 },
+    { headerName: "Description", field: "description", minWidth: 160 },
+    { headerName: "Demands", field: "demands", minWidth: 140 },
+    { headerName: "Status", field: "overallStatus", minWidth: 120 },
+    { headerName: "Assigned Dept", field: "assignedDept", minWidth: 140 },
+    { headerName: "Remarks", field: "remarks", minWidth: 140 },
+    { headerName: "Opinion & Comments", field: "opinionAndComments", minWidth: 160 },
+    { headerName: "Expert Opinion", field: "expertOpinion", minWidth: 140 },
+    { headerName: "Expert Opinion Date", field: "expertOpinionDate", minWidth: 140 },
+    { headerName: "CEO Comments", field: "ceoComments", minWidth: 140 },
+    { headerName: "CEO Comments Date", field: "ceoCommentsDate", minWidth: 140 },
+    { headerName: "Final Decision", field: "finalDecision", minWidth: 160 },
+    { headerName: "Official Reply Date", field: "officialReplyDate", minWidth: 140 },
+    { headerName: "Discussion Details", field: "discussionDetails", minWidth: 160 },
+    { headerName: "Final Decision Date", field: "finalDecisionDate", minWidth: 140 },
+    { headerName: "PV Report", field: "pvReport", minWidth: 140 },
+    { headerName: "Official Amount", field: "officialAmount", minWidth: 120 },
+    { headerName: "Penalties Amount", field: "penaltiesAmount", minWidth: 120 },
+    { headerName: "Motivation Amount", field: "motivationAmount", minWidth: 120 },
+    { headerName: "Total Amount", field: "totalAmount", minWidth: 120 },
+    { headerName: "CEO Approval Status", field: "ceoApprovalStatus", minWidth: 140 },
+    { headerName: "CEO Approval Date", field: "ceoApprovalDate", minWidth: 140 },
+    { headerName: "Invoice Details", field: "invoiceDetails", minWidth: 140 },
+    { headerName: "Final Settlement", field: "finalSettlement", minWidth: 140 },
+    { headerName: "NDP No", field: "ndpNo", minWidth: 120 },
+    { headerName: "NDP Amount", field: "ndpAmount", minWidth: 120 },
+    { headerName: "DN No", field: "dnNo", minWidth: 120 },
+    { headerName: "DN Amount", field: "dnAmount", minWidth: 120 },
+    { headerName: "AMR A No", field: "amrANo", minWidth: 120 },
+    { headerName: "AMR B No", field: "amrBNo", minWidth: 120 },
+    { headerName: "Claims Notes", field: "claimsNotes", minWidth: 140 },
+    { headerName: "Litigation Case Details", field: "litigationCaseDetails", minWidth: 160 },
+    { headerName: "Litigation Case Amount", field: "litigationCaseAmount", minWidth: 140 },
+    { headerName: "Litigation Motivation Amount", field: "litigationMotivationAmount", minWidth: 160 },
+    { headerName: "Litigation Case Status", field: "litigationCaseStatus", minWidth: 140 },
+    { headerName: "Refund Request Date", field: "refundRequestDate", minWidth: 140 },
+    { headerName: "Refund Approval Amount", field: "refundApprovalAmount", minWidth: 140 },
+    { headerName: "Last Reminder Date", field: "lastReminderDate", minWidth: 140 },
+    { headerName: "Lawyer's Opinion", field: "lawyersOpinion", minWidth: 140 },
+    { headerName: "Court Case Details", field: "courtCaseDetails", minWidth: 140 },
+    { headerName: "Final Judgement", field: "finalJudgementDetails", minWidth: 140 },
+    { headerName: "Judgement Date", field: "judgementDate", minWidth: 140 },
+    { headerName: "Lawyer's Fee", field: "lawyersFee", minWidth: 120 },
+    { headerName: "Court Legal Expenses", field: "courtLegalExpenses", minWidth: 140 },
+    { headerName: "Total Legal Fees", field: "totalLegalFees", minWidth: 140 },
+    { headerName: "Court Case Status", field: "courtCaseStatus", minWidth: 140 },
+  ], []);
+
+  const onRowClicked = useCallback((event:any) => {
+    router.push(`/tasks/${event.data._id}`);
+  }, [router]);
+
   // Protect route
   useEffect(() => {
     requireAuth();
@@ -310,8 +456,49 @@ export default function MasterDatabase() {
     }
   };
 
+  const fetchTaskFiles = async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`);
+      const data = await res.json();
+      if (res.ok && data.files) {
+        setList(data.files);
+      }
+    } catch (error) {
+      console.error("Error fetching task files:", error);
+    }
+  };
+
   useEffect(() => {
     fetchTasks();
+  }, []);
+
+  // Fetch task files when taskId changes
+  useEffect(() => {
+    if (taskId) {
+      fetchTaskFiles(taskId);
+    } else {
+      setList([]); // Clear list when no task is selected
+    }
+  }, [taskId]);
+
+  // Auto-switch to card view on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768 && viewMode === 'table') {
+        setViewMode('cards');
+      }
+    };
+
+    handleResize(); // Check on mount
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [viewMode]);
+
+  // Force card view on mobile for better experience
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setViewMode('cards');
+    }
   }, []);
 
   interface OptionItem {
@@ -532,6 +719,8 @@ export default function MasterDatabase() {
 
         if (result._id) {
           setTaskId(result._id);
+          // Fetch task files after creating the task
+          fetchTaskFiles(result._id);
         }
 
         toast.success("Task created successfully ✅");
@@ -606,51 +795,75 @@ export default function MasterDatabase() {
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!file) return;
+    if (!file) {
+      setStatus("No file selected.");
+      return;
+    }
+    if (!taskId) {
+      setStatus("Error: No task selected for upload. Please select a task first.");
+      console.error("Task ID is not available for file upload in MasterDatabase.");
+      return;
+    }
 
     setLoading(true);
     const formData = new FormData();
-    formData.append("files", file); // ✅ must match backend's expected field
+    formData.append("files", file);
+    formData.append("taskId", taskId);
 
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    const data = await res.json();
-    console.log("Response JSON:", data);
+      const data = await res.json();
+      console.log("Response JSON:", data);
 
-    setLoading(false);
-    if (data.success) {
-      setStatus("Upload successful!");
-      // Update your file list if needed
-    } else {
-      setStatus("Upload failed.");
+      if (res.ok && data.success) {
+        setStatus("Upload successful!");
+        // Update the list with the uploaded files
+        if (data.task && data.task.files) {
+          setList(data.task.files);
+        }
+        fetchTasks();
+      } else {
+        setStatus("Upload failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setStatus("Upload failed due to network or server error.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <Toaster />
-      <div className="w-52 fixed h-full">
+      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
+      <div className="w-52 fixed h-full z-50 md:block">
         <Navbar />
       </div>
       {!showForm ? (
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-100 ml-64">
-          <div className="bg-white rounded-md w-full max-w-6xl mx-auto shadow-md">
-            <div className="flex justify-between items-center p-4">
-              <h2 className="text-lg font-medium text-black">Tasks List</h2>
-              <div className="flex items-center space-x-4 w-full max-w-xl mx-auto mb-4">
-                <div className="relative flex-1">
+        <div className="flex-1 overflow-y-auto p-4 md:ml-64 pt-16 md:pt-4">
+          {/* Enhanced Header Section */}
+          <div className="mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Task Management</h1>
+                <p className="text-gray-600">Manage and track all your tasks efficiently</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative">
                   <input
                     type="text"
-                    placeholder="Search by subject"
+                    placeholder="Search tasks..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                    className="w-full sm:w-80 pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white shadow-sm"
                   />
                   <svg
-                    className="h-5 w-5 text-gray-400 absolute left-3 top-2.5"
+                    className="h-5 w-5 text-gray-400 absolute left-3 top-3.5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -663,471 +876,394 @@ export default function MasterDatabase() {
                     />
                   </svg>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
-                  Search
+                <button
+                  onClick={() => {
+                    setShowForm(true);
+                    setTaskId(null);
+                    setFormData({
+                      sno: "",
+                      sender: "",
+                      subject: "",
+                      location: "",
+                      receiver: "",
+                      site: "",
+                      periodFrom: "",
+                      periodTo: "",
+                      receiptDate: "",
+                      dueDate: "",
+                      overDueDate: "",
+                      priority: "",
+                      description: "",
+                      demands: "",
+                      overallStatus: "",
+                      assignedDept: "",
+                      assignee: [],
+                      remarks: "",
+                      comments: [],
+                      newComment: "",
+                      opinionAndComments: "",
+                      expertOpinion: "",
+                      expertOpinionDate: "",
+                      internalComments: "",
+                      internalCommentsDate: "",
+                      ceoComments: "",
+                      ceoCommentsDate: "",
+                      finalDecision: "",
+                      officialReplyDate: "",
+                      discussionDetails: "",
+                      finalDecisionDate: "",
+                      pvReport: "",
+                      officialAmount: "",
+                      penaltiesAmount: "",
+                      motivationAmount: "",
+                      totalAmount: "",
+                      ceoApprovalStatus: "",
+                      ceoApprovalDate: "",
+                      invoiceDetails: "",
+                      finalSettlement: "",
+                      ndpNo: "",
+                      ndpReceivedDate: "",
+                      ndpAmount: "",
+                      ndpPaymentDueDate: "",
+                      ndpPaymentDate: "",
+                      ndpPaymentStatus: "",
+                      dnNo: "",
+                      dnReceivedAmount: "",
+                      dnAmount: "",
+                      dnPaymentDueDate: "",
+                      dnPaymentDate: "",
+                      dnPaymentStatus: "",
+                      amrANo: "",
+                      amrAReceivedDate: "",
+                      amrAAmount: "",
+                      amrAPaymentDueDate: "",
+                      amrAPaymentDate: "",
+                      amrAPaymentStatus: "",
+                      amrBNo: "",
+                      amrBReceivedDate: "",
+                      amrBAmount: "",
+                      amrBPaymentDueDate: "",
+                      amrBPaymentDate: "",
+                      amrBPaymentStatus: "",
+                      claimsNotes: "",
+                      litigationCaseDetails: "",
+                      litigationCaseStartDate: "",
+                      litigationCaseAmount: "",
+                      litigationCaseAmountPaymentDate: "",
+                      litigationMotivationAmount: "",
+                      litigationCaseClosedDate: "",
+                      litigationCaseStatus: "",
+                      refundRequestDate: "",
+                      refundApprovalReceivedDate: "",
+                      refundApprovalAmount: "",
+                      lastReminderDate: "",
+                      lawyersOpinion: "",
+                      courtCaseDetails: "",
+                      finalJudgementDetails: "",
+                      judgementDate: "",
+                      lawyersFee: "",
+                      courtLegalExpenses: "",
+                      totalLegalFees: "",
+                      courtCaseStatus: "",
+                    });
+                  }}
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span className="hidden sm:inline">Add New Task</span>
+                  <span className="sm:hidden">Add Task</span>
                 </button>
               </div>
-              <button
-                onClick={() => {
-                  setShowForm(true);
-                  setTaskId(null);
-                  setFormData({
-                    sno: "",
-                    sender: "",
-                    subject: "",
-                    location: "",
-                    receiver: "",
-                    site: "",
-                    periodFrom: "",
-                    periodTo: "",
-                    receiptDate: "",
-                    dueDate: "",
-                    overDueDate: "",
-                    priority: "",
-                    description: "",
-                    demands: "",
-                    overallStatus: "",
-                    assignedDept: "",
-                    assignee: [],
-                    remarks: "",
-                    comments: [],
-                    newComment: "",
-                    opinionAndComments: "",
-                    expertOpinion: "",
-                    expertOpinionDate: "",
-                    internalComments: "",
-                    internalCommentsDate: "",
-                    ceoComments: "",
-                    ceoCommentsDate: "",
-                    finalDecision: "",
-                    officialReplyDate: "",
-                    discussionDetails: "",
-                    finalDecisionDate: "",
-                    pvReport: "",
-                    officialAmount: "",
-                    penaltiesAmount: "",
-                    motivationAmount: "",
-                    totalAmount: "",
-                    ceoApprovalStatus: "",
-                    ceoApprovalDate: "",
-                    invoiceDetails: "",
-                    finalSettlement: "",
-                    ndpNo: "",
-                    ndpReceivedDate: "",
-                    ndpAmount: "",
-                    ndpPaymentDueDate: "",
-                    ndpPaymentDate: "",
-                    ndpPaymentStatus: "",
-                    dnNo: "",
-                    dnReceivedAmount: "",
-                    dnAmount: "",
-                    dnPaymentDueDate: "",
-                    dnPaymentDate: "",
-                    dnPaymentStatus: "",
-                    amrANo: "",
-                    amrAReceivedDate: "",
-                    amrAAmount: "",
-                    amrAPaymentDueDate: "",
-                    amrAPaymentDate: "",
-                    amrAPaymentStatus: "",
-                    amrBNo: "",
-                    amrBReceivedDate: "",
-                    amrBAmount: "",
-                    amrBPaymentDueDate: "",
-                    amrBPaymentDate: "",
-                    amrBPaymentStatus: "",
-                    claimsNotes: "",
-                    litigationCaseDetails: "",
-                    litigationCaseStartDate: "",
-                    litigationCaseAmount: "",
-                    litigationCaseAmountPaymentDate: "",
-                    litigationMotivationAmount: "",
-                    litigationCaseClosedDate: "",
-                    litigationCaseStatus: "",
-                    refundRequestDate: "",
-                    refundApprovalReceivedDate: "",
-                    refundApprovalAmount: "",
-                    lastReminderDate: "",
-                    lawyersOpinion: "",
-                    courtCaseDetails: "",
-                    finalJudgementDetails: "",
-                    judgementDate: "",
-                    lawyersFee: "",
-                    courtLegalExpenses: "",
-                    totalLegalFees: "",
-                    courtCaseStatus: "",
-                  });
-                }}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md"
-              >
-                + Add Task
-              </button>
             </div>
+          </div>
 
+          {/* Floating Action Button for Mobile */}
+          <div className="fixed bottom-6 right-6 z-50 md:hidden">
+            <button
+              onClick={() => {
+                setShowForm(true);
+                setTaskId(null);
+                setFormData({
+                  sno: "", sender: "", subject: "", location: "", receiver: "", site: "",
+                  periodFrom: "", periodTo: "", receiptDate: "", dueDate: "", overDueDate: "",
+                  priority: "", description: "", demands: "", overallStatus: "", assignedDept: "",
+                  assignee: [], remarks: "", comments: [], newComment: "", opinionAndComments: "",
+                  expertOpinion: "", expertOpinionDate: "", internalComments: "", internalCommentsDate: "",
+                  ceoComments: "", ceoCommentsDate: "", finalDecision: "", officialReplyDate: "",
+                  discussionDetails: "", finalDecisionDate: "", pvReport: "", officialAmount: "",
+                  penaltiesAmount: "", motivationAmount: "", totalAmount: "", ceoApprovalStatus: "",
+                  ceoApprovalDate: "", invoiceDetails: "", finalSettlement: "", ndpNo: "",
+                  ndpReceivedDate: "", ndpAmount: "", ndpPaymentDueDate: "", ndpPaymentDate: "",
+                  ndpPaymentStatus: "", dnNo: "", dnReceivedAmount: "", dnAmount: "", dnPaymentDueDate: "",
+                  dnPaymentDate: "", dnPaymentStatus: "", amrANo: "", amrAReceivedDate: "", amrAAmount: "",
+                  amrAPaymentDueDate: "", amrAPaymentDate: "", amrAPaymentStatus: "", amrBNo: "",
+                  amrBReceivedDate: "", amrBAmount: "", amrBPaymentDueDate: "", amrBPaymentDate: "",
+                  amrBPaymentStatus: "", claimsNotes: "", litigationCaseDetails: "", litigationCaseStartDate: "",
+                  litigationCaseAmount: "", litigationCaseAmountPaymentDate: "", litigationMotivationAmount: "",
+                  litigationCaseClosedDate: "", litigationCaseStatus: "", refundRequestDate: "",
+                  refundApprovalReceivedDate: "", refundApprovalAmount: "", lastReminderDate: "",
+                  lawyersOpinion: "", courtCaseDetails: "", finalJudgementDetails: "", judgementDate: "",
+                  lawyersFee: "", courtLegalExpenses: "", totalLegalFees: "", courtCaseStatus: "",
+                });
+              }}
+              className="w-14 h-14 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Total Tasks</p>
+                  <p className="text-2xl font-bold text-gray-900">{tasks.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Pending</p>
+                  <p className="text-2xl font-bold text-gray-900">{tasks.filter(t => t.overallStatus?.toLowerCase().includes('pending')).length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold text-gray-900">{tasks.filter(t => t.overallStatus?.toLowerCase().includes('completed')).length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Overdue</p>
+                  <p className="text-2xl font-bold text-gray-900">{tasks.filter(t => {
+                    if (!t.dueDate) return false;
+                    return new Date(t.dueDate) < new Date();
+                  }).length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* View Toggle */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
+            <div className="flex items-center justify-center sm:justify-start">
+              <div className="bg-gray-100 rounded-lg p-1 flex">
+                <button
+                  onClick={() => {
+                    if (window.innerWidth < 768) {
+                      toast.success("Table view is optimized for desktop. Consider using card view on mobile for better experience.");
+                    }
+                    setViewMode('table');
+                  }}
+                  className={`px-4 py-2 rounded-md font-medium transition-all duration-200 ${
+                    viewMode === 'table'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  <span className="hidden sm:inline">Table</span>
+                  <span className="sm:hidden">List</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all duration-200 ${
+                    viewMode === 'cards'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Cards</span>
+                  <span className="sm:hidden">Grid</span>
+                </button>
+              </div>
+            </div>
+            <div className="text-sm text-gray-600 text-center sm:text-right">
+              {viewMode === 'table' ? (
+                <span className="flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Desktop optimized
+                </span>
+              ) : (
+                <span className="flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Mobile friendly
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Enhanced Table Container */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Tasks Overview</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Showing {filteredTasks.length} of {tasks.length} tasks
+                {searchTerm && ` (filtered by "${searchTerm}")`}
+              </p>
+            </div>
+            
             {loading ? (
-              <div className="p-4 text-center">Loading...</div>
+              <div className="flex items-center justify-center p-12">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="text-gray-600">Loading tasks...</span>
+                </div>
+              </div>
+            ) : viewMode === 'table' ? (
+              <div className="ag-theme-alpine" style={{ height: 'calc(100vh - 400px)', width: '100%' }}>
+                <AgGridReact
+                  theme="legacy"
+                  rowData={filteredTasks}
+                  columnDefs={columnDefs}
+                  defaultColDef={defaultColDef}
+                  onGridReady={onGridReady}
+                  onRowClicked={onRowClicked}
+                  rowHeight={60}
+                  headerHeight={50}
+                  suppressRowClickSelection={true}
+                  animateRows={true}
+                  pagination={true}
+                  paginationPageSize={20}
+                  paginationPageSizeSelector={[10, 20, 50, 100]}
+                  domLayout="normal"
+                  suppressPaginationPanel={false}
+                  paginationAutoPageSize={false}
+                  suppressColumnVirtualisation={false}
+                  suppressRowVirtualisation={false}
+                  enableCellTextSelection={true}
+                  suppressMenuHide={true}
+                />
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        S.No
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Sender
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Subject
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Location
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Receiver
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Site
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Period From
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Period To
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Receipt Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Due Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Overdue Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Priority
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Description
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Demands
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Status
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Assigned Dept
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Remarks
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Opinion & Comments
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Expert Opinion
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Expert Opinion Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        CEO Comments
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        CEO Comments Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Final Decision
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Official Reply Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Discussion Details
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Final Decision Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        PV Report
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Official Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Penalties Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Motivation Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Total Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        CEO Approval Status
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        CEO Approval Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Invoice Details
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Final Settlement
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        NDP No
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        NDP Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        DN No
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        DN Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        AMR A No
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        AMR B No
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Claims Notes
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Litigation Case Details
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Litigation Case Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Litigation Motivation Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Litigation Case Status
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Refund Request Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Refund Approval Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Last Reminder Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Lawyer’s Opinion
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Court Case Details
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Final Judgement
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Judgement Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Lawyer’s Fee
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Court Legal Expenses
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Total Legal Fees
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-black uppercase tracking-wider border border-gray-300">
-                        Court Case Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTasks.map((task) => (
-                      <tr
-                        key={task._id}
-                        onClick={() => router.push(`/tasks/${task._id}`)}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.sno}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.sender}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.subject}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.location}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.receiver}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.site}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.periodFrom}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.periodTo}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.receiptDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.dueDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.overDueDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.priority}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.description}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.demands}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.overallStatus}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.assignedDept}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.remarks}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.opinionAndComments}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.expertOpinion}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.expertOpinionDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ceoComments}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ceoCommentsDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.finalDecision}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.officialReplyDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.discussionDetails}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.finalDecisionDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.pvReport}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.officialAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.penaltiesAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.motivationAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.totalAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ceoApprovalStatus}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ceoApprovalDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.invoiceDetails}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.finalSettlement}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ndpNo}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.ndpAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.dnNo}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.dnAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.amrANo}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.amrBNo}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.claimsNotes}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.litigationCaseDetails}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.litigationCaseAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.litigationMotivationAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.litigationCaseStatus}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.refundRequestDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.refundApprovalAmount}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.lastReminderDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.lawyersOpinion}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.courtCaseDetails}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.finalJudgementDetails}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.judgementDate}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.lawyersFee}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.courtLegalExpenses}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.totalLegalFees}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-black border border-gray-300">
-                          {task.courtCaseStatus}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredTasks.map((task) => (
+                    <div
+                      key={task._id}
+                      onClick={() => router.push(`/tasks/${task._id}`)}
+                      className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200 cursor-pointer hover:border-blue-300 group"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 text-lg mb-2 group-hover:text-blue-600 transition-colors">
+                            {task.subject || 'No Subject'}
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-2">
+                            <span className="font-medium">S.No:</span> {task.sno || 'N/A'}
+                          </p>
+                          {task.sender && (
+                            <p className="text-sm text-gray-600 mb-2">
+                              <span className="font-medium">From:</span> {task.sender}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end space-y-2">
+                          {task.priority && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              task.priority === 'High' ? 'bg-red-100 text-red-800' :
+                              task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          )}
+                          {task.overallStatus && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              task.overallStatus.toLowerCase().includes('completed') ? 'bg-green-100 text-green-800' :
+                              task.overallStatus.toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
+                              task.overallStatus.toLowerCase().includes('overdue') ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {task.overallStatus}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm text-gray-600">
+                        {task.assignedDept && (
+                          <p><span className="font-medium">Department:</span> {task.assignedDept}</p>
+                        )}
+                        {task.location && (
+                          <p><span className="font-medium">Location:</span> {task.location}</p>
+                        )}
+                        {task.dueDate && (
+                          <p className={`${new Date(task.dueDate) < new Date() ? 'text-red-600 font-medium' : ''}`}>
+                            <span className="font-medium">Due:</span> {new Date(task.dueDate).toLocaleDateString()}
+                          </p>
+                        )}
+                        {task.createdAt && (
+                          <p><span className="font-medium">Created:</span> {new Date(task.createdAt).toLocaleDateString()}</p>
+                        )}
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-500">
+                            Click to view details
+                          </span>
+                          <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {filteredTasks.length === 0 && (
+                  <div className="text-center py-12">
+                    <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+                    <p className="text-gray-600">Try adjusting your search criteria or create a new task.</p>
+                  </div>
+                )}
               </div>
             )}
+            
+
           </div>
         </div>
       ) : (
@@ -1223,7 +1359,7 @@ export default function MasterDatabase() {
                 <div className="overflow-y-auto p-4">
                   {activeTab === "Task" && (
                     <div className="p-4 md:p-6">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {["sender", "subject"].map((field, i) => (
                           <div key={i}>
                             <label className="block text-sm font-medium text-black mb-1 capitalize">
@@ -1239,7 +1375,7 @@ export default function MasterDatabase() {
                           </div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                         <div>
                           <label className="block text-sm font-medium text-black mb-1">
                             Assigned Department
@@ -1337,7 +1473,7 @@ export default function MasterDatabase() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                         {["location", "receiver", "site"].map((field, i) => (
                           <div key={i}>
                             <label className="block text-sm font-medium text-black mb-1 capitalize">
@@ -1371,7 +1507,7 @@ export default function MasterDatabase() {
                           </div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                         {["periodFrom", "periodTo", "receiptDate"].map(
                           (field, i) => (
                             <div key={i}>
@@ -1390,7 +1526,7 @@ export default function MasterDatabase() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                         {["dueDate", "overDueDate"].map((field, i) => (
                           <div key={i}>
                             <label className="block text-sm font-medium text-black mb-1 capitalize">
@@ -1424,7 +1560,7 @@ export default function MasterDatabase() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                         {["description", "demands"].map((field, i) => (
                           <div key={i}>
                             <label className="block text-sm font-medium text-black mb-1 capitalize">
@@ -1441,7 +1577,7 @@ export default function MasterDatabase() {
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                         {["remarks", "opinionAndComments"].map((field, i) => (
                           <div key={i}>
                             <label className="block text-sm font-medium text-black mb-1 capitalize">
@@ -1457,71 +1593,99 @@ export default function MasterDatabase() {
                           </div>
                         ))}
                         <div className="mb-6 text-black">
-                          <form onSubmit={handleUpload}>
-                            <div className="flex items-center space-x-3">
-                              <input
-                                type="file"
-                                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                                className="border rounded px-3 py-1 text-sm"
-                                name="file"
-                              />
-                              <button
-                                type="submit"
-                                disabled={!file || loading}
-                                className="px-4 py-1 bg-blue-600 text-white rounded disabled:opacity-50 hover:bg-blue-700 transition flex items-center"
-                              >
-                                {loading ? (
-                                  <>
-                                    <svg
-                                      className="animate-spin h-4 w-4 mr-2 text-white"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <circle
-                                        className="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        strokeWidth="4"
-                                        fill="none"
-                                      />
-                                      <path
-                                        className="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8z"
-                                      />
-                                    </svg>
-                                    Uploading...
-                                  </>
-                                ) : (
-                                  "Upload"
-                                )}
-                              </button>
-                            </div>
+                          <form onSubmit={handleUpload} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                              className="border rounded px-3 py-2 text-sm w-full sm:w-auto"
+                              name="file"
+                            />
+                            <button
+                              type="submit"
+                              disabled={!file || loading}
+                              className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50 hover:bg-blue-700 transition flex items-center justify-center w-full sm:w-auto"
+                            >
+                              {loading ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-4 w-4 mr-2 text-white"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                      fill="none"
+                                    />
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8z"
+                                    />
+                                  </svg>
+                                  Uploading...
+                                </>
+                              ) : (
+                                "Upload"
+                              )}
+                            </button>
                           </form>
-
+                          {/* Show warning if no taskId */}
+                          {!taskId && (
+                            <div className="mt-2 text-xs text-red-600 font-medium">
+                              Please save the task before uploading an image.
+                            </div>
+                          )}
                           {status && <p className="mt-3 text-green-600 font-medium">{status}</p>}
-
                           <h2 className="text-xl mt-6 mb-2 font-semibold">Your Files</h2>
-                          <ul className="list-none pl-0 space-y-2">
-                            {list.map((f) => (
-                              <li key={f._id} className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
-                                <span role="img" aria-label="file">
-                                  📄 {f.name}
-                                </span>
-                                <span className="text-sm text-gray-600">
-                                  (uploaded at {new Date(f.uploadedAt).toLocaleString()})
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          {list.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500">
+                              <p>No files uploaded yet</p>
+                            </div>
+                          ) : (
+                            <ul className="list-none pl-0 space-y-3">
+                              {list.map((f) => (
+                                <li key={f._id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                    <div className="flex items-center space-x-2">
+                                      <span role="img" aria-label="file" className="text-lg">
+                                        📄
+                                      </span>
+                                      <span className="font-medium text-gray-900 break-all">
+                                        {f.fileName || f.name}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-gray-500 sm:text-sm">
+                                      {new Date(f.uploadedAt).toLocaleDateString()} at {new Date(f.uploadedAt).toLocaleTimeString()}
+                                    </div>
+                                  </div>
+                                  {f.url && (
+                                    <div className="mt-2">
+                                      <a 
+                                        href={f.url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:text-blue-800 text-sm underline"
+                                      >
+                                        View File
+                                      </a>
+                                    </div>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       </div>
 
                       {renderComments()}
 
-                      <div className="flex flex-col md:flex-row justify-between mt-6 gap-4">
-                        <div className="relative flex w-full md:w-336">
+                      <div className="flex flex-col sm:flex-row justify-between mt-6 gap-4">
+                        <div className="relative flex w-full sm:w-336">
                           <input
                             type="text"
                             placeholder="Add Comment"
@@ -1557,7 +1721,7 @@ export default function MasterDatabase() {
                   {activeTab === "outcome" && (
                     <div className="p-4 md:p-6 text-black">
                       <form onSubmit={handleSubmit}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium mb-1">
                               Expert Opinion
@@ -1584,7 +1748,7 @@ export default function MasterDatabase() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                           <div>
                             <label className="block text-sm font-medium mb-1">
                               Internal Comments
@@ -1611,7 +1775,7 @@ export default function MasterDatabase() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                           <div>
                             <label className="block text-sm font-medium mb-1">
                               CEO Comments
@@ -1638,7 +1802,7 @@ export default function MasterDatabase() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                           <div>
                             <label className="block text-sm font-medium mb-1">
                               Final Decision & Settlement
@@ -1667,8 +1831,8 @@ export default function MasterDatabase() {
 
                         {renderComments()}
 
-                        <div className="flex flex-col md:flex-row justify-between mt-6 gap-4">
-                          <div className="relative flex w-full md:w-336">
+                        <div className="flex flex-col sm:flex-row justify-between mt-6 gap-4">
+                          <div className="relative flex w-full sm:w-336">
                             <input
                               type="text"
                               placeholder="Add Comment"
@@ -1703,7 +1867,7 @@ export default function MasterDatabase() {
                   )}
                   {activeTab === "invoices" && (
                     <div className="p-4 md:p-6 text-black">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium mb-1">
                             Discussion Details
@@ -1742,7 +1906,7 @@ export default function MasterDatabase() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                         <div>
                           <label className="block text-sm font-medium mb-1">
                             PV Report
@@ -1805,7 +1969,7 @@ export default function MasterDatabase() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                         <div>
                           <label className="block text-sm font-medium mb-1">
                             CEO Approval Status
@@ -1860,8 +2024,8 @@ export default function MasterDatabase() {
 
                       {renderComments()}
 
-                      <div className="flex flex-col md:flex-row justify-between mt-6 gap-4">
-                        <div className="relative flex w-full md:w-336">
+                      <div className="flex flex-col sm:flex-row justify-between mt-6 gap-4">
+                        <div className="relative flex w-full sm:w-336">
                           <input
                             type="text"
                             placeholder="Add Comment"
@@ -1906,7 +2070,7 @@ export default function MasterDatabase() {
                   )}
                   {activeTab === "claims" && (
                     <div className="p-4 md:p-6 text-black">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {[
                           ["NDP No.", "ndpNo", "text"],
                           ["NDP Received Date", "ndpReceivedDate", "date"],
@@ -1978,8 +2142,8 @@ export default function MasterDatabase() {
 
                       {renderComments()}
 
-                      <div className="flex flex-col md:flex-row justify-between mt-6 gap-4">
-                        <div className="relative flex w-full md:w-336">
+                      <div className="flex flex-col sm:flex-row justify-between mt-6 gap-4">
+                        <div className="relative flex w-full sm:w-336">
                           <input
                             type="text"
                             placeholder="Add Comment"
@@ -2139,7 +2303,7 @@ export default function MasterDatabase() {
                         </table>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {[
                           [
                             "Litigation Case Details",
@@ -2251,8 +2415,8 @@ export default function MasterDatabase() {
 
                       {renderComments()}
 
-                      <div className="flex flex-col md:flex-row justify-between mt-6 gap-4">
-                        <div className="relative flex w-full md:w-3/4">
+                      <div className="flex flex-col sm:flex-row justify-between mt-6 gap-4">
+                        <div className="relative flex w-full sm:w-3/4">
                           <input
                             type="text"
                             placeholder="Add Comment"
