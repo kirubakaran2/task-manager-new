@@ -160,6 +160,22 @@ const TaskReport: React.FC = () => {
     'judgementDate', 'lawyersFee', 'courtLegalExpenses', 'totalLegalFees', 'courtCaseStatus'
   ]);
   const [showColumnSelector, setShowColumnSelector] = useState<boolean>(false);
+  // Responsive view mode
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
+
+  // Auto-switch to card view on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setViewMode('cards');
+      } else {
+        setViewMode('table');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Filter state
   interface Filters {
@@ -244,6 +260,8 @@ const handleDeleteTask = useCallback(async (id: string) => {
       filter: 'agTextColumnFilter',
       sortable: true,
       width: 100,
+      minWidth: 80,
+      maxWidth: 120,
       pinned: 'left',
     },
     {
@@ -251,12 +269,15 @@ const handleDeleteTask = useCallback(async (id: string) => {
       field: 'sender',
       filter: 'agTextColumnFilter',
       sortable: true,
+      minWidth: 140,
     },
     {
       headerName: 'Subject',
       field: 'subject',
       filter: 'agTextColumnFilter',
       sortable: true,
+      minWidth: 200,
+      flex: 2,
     },
     {
       headerName: 'Location',
@@ -953,8 +974,23 @@ const handleDeleteTask = useCallback(async (id: string) => {
       <Navbar />
       <div className="container mx-auto px-4 py-6 pl-0 md:pl-60">
         <div className="bg-white rounded-lg shadow-md p-4 md:p-6">ß
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">Task Report</h1>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
+            <div className="flex items-center justify-center sm:justify-start">
+              <div className="bg-gray-100 rounded-lg p-1 flex">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all duration-200 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all duration-200 ${viewMode === 'cards' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  Cards
+                </button>
+              </div>
+            </div>
             <div className="flex space-x-2">
               <button
                 onClick={refreshData}
@@ -1199,9 +1235,8 @@ const handleDeleteTask = useCallback(async (id: string) => {
             <div className="flex justify-center items-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
             </div>
-          ) : (
-            /* AG Grid Component */
-<div className="ag-theme-alpine" style={{ height: 'calc(100vh - 300px)', width: '100%' }}>
+          ) : viewMode === 'table' ? (
+            <div className="ag-theme-alpine overflow-x-auto" style={{ height: 'calc(100vh - 300px)', width: '100%', minWidth: 600 }}>
               <AgGridReact
                 rowData={rowData}
                 columnDefs={columnDefs}
@@ -1215,6 +1250,53 @@ const handleDeleteTask = useCallback(async (id: string) => {
                 suppressRowClickSelection={false}
                 suppressHorizontalScroll={true}
               />
+              <div className="block sm:hidden text-xs text-gray-500 mt-2 text-center">Scroll horizontally to see more columns</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {rowData.map((task) => (
+                <div key={task._id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="font-bold text-lg text-blue-700">{task.subject || 'No Subject'}</div>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">S.No: {task.sno}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 mb-2">
+                    <div><span className="font-medium">Sender:</span> {task.sender}</div>
+                    <div><span className="font-medium">Location:</span> {task.location}</div>
+                    <div><span className="font-medium">Receiver:</span> {task.receiver}</div>
+                    <div><span className="font-medium">Due:</span> {formatDate(task.dueDate)}</div>
+                    <div><span className="font-medium">Status:</span> {task.overallStatus}</div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {task.priority && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        task.priority === 'High' ? 'bg-red-100 text-red-800' :
+                        task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {task.priority}
+                      </span>
+                    )}
+                    {task.assignedDept && (
+                      <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">{task.assignedDept}</span>
+                    )}
+                  </div>
+                  <div className="mt-4 flex justify-between items-center">
+                    <button
+                      onClick={() => router.push(`/tasks/${task._id}`)}
+                      className="text-blue-600 hover:underline text-xs"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTask(task._id)}
+                      className="text-red-600 hover:text-red-800 text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
